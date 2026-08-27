@@ -1,0 +1,5 @@
+{
+  "source": "/path/to/source-folder",
+  "backup_root": "/path/to/backup-folder",
+  "log_file": "backup.log"
+}
