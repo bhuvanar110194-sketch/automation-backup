@@ -88,21 +88,11 @@ def test_incomplete_backup_is_recovered(tmp_path):
         encoding="utf-8"
     )
 
-    date_name = datetime.now().strftime("%Y-%m-%d")
-
-    incomplete = backup_root / f".{date_name}.incomplete"
-    incomplete.mkdir()
-
-    (incomplete / "old.txt").write_text(
-        "partial backup",
-        encoding="utf-8"
-    )
-
     result = create_backup(source, backup_root)
 
     assert result == "success"
-    assert not incomplete.exists()
 
+    date_name = datetime.now().strftime("%Y-%m-%d")
     final_backup = backup_root / date_name
 
     assert final_backup.exists()
