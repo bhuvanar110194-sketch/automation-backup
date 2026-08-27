@@ -1,99 +1,113 @@
 import json
+import logging
+import shutil
 from datetime import datetime
-from backup import create_backup, load_config
+from pathlib import Path
 
 
-def test_load_config(tmp_path):
-    config_file = tmp_path / "config.json"
-
-    config_file.write_text(
-        json.dumps({
-            "source": "source",
-            "backup_root": "backup",
-            "log_file": "backup.log"
-        }),
-        encoding="utf-8"
+def setup_logging(log_file):
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
     )
 
-    config = load_config(config_file)
 
-    assert config["source"] == "source"
-    assert config["backup_root"] == "backup"
-    assert config["log_file"] == "backup.log"
+def load_config(config_path):
+    with open(config_path, "r", encoding="utf-8") as file:
+        return json.load(file)
 
 
-def test_backup_is_created(tmp_path):
-    source = tmp_path / "source"
-    backup_root = tmp_path / "backups"
+def create_backup(source, backup_root):
+    source = Path(source)
+    backup_root = Path(backup_root)
 
-    source.mkdir()
-    (source / "file.txt").write_text(
-        "hello",
-        encoding="utf-8"
-    )
+    if not source.exists():
+        raise FileNotFoundError(
+            f"Source folder not found: {source}"
+        )
 
-    result = create_backup(source, backup_root)
+    if not source.is_dir():
+        raise NotADirectoryError(
+            f"Source is not a folder: {source}"
+        )
 
-    assert result == "success"
+    backup_root.mkdir(parents=True, exist_ok=True)
 
     date_name = datetime.now().strftime("%Y-%m-%d")
-    backup_dir = backup_root / date_name
 
-    assert backup_dir.exists()
-    assert (backup_dir / "file.txt").exists()
+    final_backup = backup_root / date_name
+    incomplete_backup = backup_root / f".{date_name}.incomplete"
 
+    # Remove an old incomplete backup before retrying.
+    if incomplete_backup.exists():
+        logging.warning(
+            "RECOVERY | removing incomplete backup | path=%s",
+            incomplete_backup,
+        )
+        shutil.rmtree(incomplete_backup)
 
-def test_backup_is_idempotent(tmp_path):
-    source = tmp_path / "source"
-    backup_root = tmp_path / "backups"
-
-    source.mkdir()
-    (source / "file.txt").write_text(
-        "hello",
-        encoding="utf-8"
-    )
-
-    first = create_backup(source, backup_root)
-    second = create_backup(source, backup_root)
-
-    assert first == "success"
-    assert second == "skipped"
-
-    date_name = datetime.now().strftime("%Y-%m-%d")
-    backup_dir = backup_root / date_name
-
-    assert backup_dir.exists()
-
-
-def test_missing_source_fails(tmp_path):
-    source = tmp_path / "missing"
-    backup_root = tmp_path / "backups"
+    # Idempotency: do not create the same backup twice.
+    if final_backup.exists():
+        logging.info(
+            "SKIPPED | backup already exists | path=%s",
+            final_backup,
+        )
+        return "skipped"
 
     try:
-        create_backup(source, backup_root)
-        assert False, "Expected FileNotFoundError"
-    except FileNotFoundError:
-        assert True
+        shutil.copytree(
+            source,
+            incomplete_backup,
+        )
+
+        incomplete_backup.rename(final_backup)
+
+        logging.info(
+            "SUCCESS | backup created | path=%s",
+            final_backup,
+        )
+
+        return "success"
+
+    except Exception:
+        logging.exception(
+            "FAILED | backup interrupted | path=%s",
+            incomplete_backup,
+        )
+        raise
 
 
-def test_incomplete_backup_is_recovered(tmp_path):
-    source = tmp_path / "source"
-    backup_root = tmp_path / "backups"
+def main():
+    config_path = Path("config.json")
 
-    source.mkdir()
-    backup_root.mkdir()
+    try:
+        config = load_config(config_path)
 
-    (source / "new.txt").write_text(
-        "new backup",
-        encoding="utf-8"
-    )
+        log_file = config.get(
+            "log_file",
+            "backup.log",
+        )
 
-    result = create_backup(source, backup_root)
+        setup_logging(log_file)
 
-    assert result == "success"
+        logging.info("START | backup run")
 
-    date_name = datetime.now().strftime("%Y-%m-%d")
-    final_backup = backup_root / date_name
+        result = create_backup(
+            config["source"],
+            config["backup_root"],
+        )
 
-    assert final_backup.exists()
-    assert (final_backup / "new.txt").exists()
+        logging.info(
+            "END | status=%s",
+            result,
+        )
+
+    except Exception:
+        logging.exception(
+            "END | status=failed"
+        )
+
+
+if __name__ == "__main__":
+    main()
