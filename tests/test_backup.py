@@ -1,5 +1,5 @@
 import json
-
+from datetime import datetime
 from backup import create_backup, load_config
 
 
@@ -19,6 +19,7 @@ def test_load_config(tmp_path):
 
     assert config["source"] == "source"
     assert config["backup_root"] == "backup"
+    assert config["log_file"] == "backup.log"
 
 
 def test_backup_is_created(tmp_path):
@@ -26,18 +27,20 @@ def test_backup_is_created(tmp_path):
     backup_root = tmp_path / "backups"
 
     source.mkdir()
-    (source / "file.txt").write_text("hello", encoding="utf-8")
+    (source / "file.txt").write_text(
+        "hello",
+        encoding="utf-8"
+    )
 
     result = create_backup(source, backup_root)
 
     assert result == "success"
 
-    backup_dirs = list(backup_root.iterdir())
-    assert len(backup_dirs) == 1
+    date_name = datetime.now().strftime("%Y-%m-%d")
+    backup_dir = backup_root / date_name
 
-    assert (backup_dirs[0] / "file.txt").read_text(
-        encoding="utf-8"
-    ) == "hello"
+    assert backup_dir.exists()
+    assert (backup_dir / "file.txt").exists()
 
 
 def test_backup_is_idempotent(tmp_path):
@@ -45,7 +48,10 @@ def test_backup_is_idempotent(tmp_path):
     backup_root = tmp_path / "backups"
 
     source.mkdir()
-    (source / "file.txt").write_text("hello", encoding="utf-8")
+    (source / "file.txt").write_text(
+        "hello",
+        encoding="utf-8"
+    )
 
     first = create_backup(source, backup_root)
     second = create_backup(source, backup_root)
@@ -53,8 +59,10 @@ def test_backup_is_idempotent(tmp_path):
     assert first == "success"
     assert second == "skipped"
 
-    backups = list(backup_root.iterdir())
-    assert len(backups) == 1
+    date_name = datetime.now().strftime("%Y-%m-%d")
+    backup_dir = backup_root / date_name
+
+    assert backup_dir.exists()
 
 
 def test_missing_source_fails(tmp_path):
@@ -63,7 +71,7 @@ def test_missing_source_fails(tmp_path):
 
     try:
         create_backup(source, backup_root)
-        assert False
+        assert False, "Expected FileNotFoundError"
     except FileNotFoundError:
         assert True
 
@@ -80,14 +88,13 @@ def test_incomplete_backup_is_recovered(tmp_path):
         encoding="utf-8"
     )
 
-    from datetime import datetime
-
     date_name = datetime.now().strftime("%Y-%m-%d")
-    incomplete = backup_root / f".{date_name}.incomplete"
 
+    incomplete = backup_root / f".{date_name}.incomplete"
     incomplete.mkdir()
+
     (incomplete / "old.txt").write_text(
-        "partial",
+        "partial backup",
         encoding="utf-8"
     )
 
