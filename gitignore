@@ -3,3 +3,4 @@ backup.log
 *.log
 __pycache__/
 .pytest_cache/
+!sample.log
