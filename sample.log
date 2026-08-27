@@ -1,0 +1,7 @@
+2026-08-27 09:30:00 | INFO | START | backup run
+2026-08-27 09:30:02 | INFO | SrUCCESS | backup created | path=/backup/2026-08-27
+2026-08-27 09:30:02 | INFO | END | status=success
+
+2026-08-27 10:00:00 | INFO | START | backup run
+2026-08-27 10:00:00 | INFO | SKIPPED | backup already exists | path=/backup/2026-08-27
+2026-08-27 10:00:00 | INFO | END | status=skipped
